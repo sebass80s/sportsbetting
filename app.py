@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 
 STATUS_FILE = PROJECT_ROOT / "data/forward/v1_forward_status.csv"
 RESULT_FILE = PROJECT_ROOT / "data/forward/v1_forward_results.csv"
+SNAPSHOT_FILE = PROJECT_ROOT / "data/forward/market_snapshot_history.csv"
 
 
 # ==================================================
@@ -63,7 +64,46 @@ def load_data():
     return df
 
 
+@st.cache_data(ttl=60)
+def load_latest_snapshot_time():
+
+    if not SNAPSHOT_FILE.exists():
+        return None
+
+    try:
+        snapshots = pd.read_csv(
+            SNAPSHOT_FILE,
+            usecols=["snapshot_timestamp"]
+        )
+    except (pd.errors.EmptyDataError, ValueError):
+        return None
+
+    timestamps = pd.to_datetime(
+        snapshots["snapshot_timestamp"],
+        utc=True,
+        errors="coerce"
+    ).dropna()
+
+    if timestamps.empty:
+        return None
+
+    return timestamps.max()
+
+
 df = load_data()
+latest_snapshot_time = load_latest_snapshot_time()
+
+if latest_snapshot_time is None:
+    st.caption("Senaste market snapshot: ingen snapshot hittad")
+else:
+    latest_snapshot_local = latest_snapshot_time.tz_convert(
+        "Europe/Stockholm"
+    )
+    st.caption(
+        "Senaste market snapshot: "
+        f"{latest_snapshot_local.strftime('%Y-%m-%d %H:%M:%S')} "
+        "(Europe/Stockholm)"
+    )
 
 
 # ==================================================
