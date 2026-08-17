@@ -11,6 +11,7 @@ SCRIPTS = [
     "archive_market_snapshot.py",
     "archive_raw_market.py",
     "v1_forward_monitor.py",
+    "ou_v1_forward_monitor.py",
     "update_forward_results.py",
 ]
 
