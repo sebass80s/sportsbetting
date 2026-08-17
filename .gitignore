@@ -1,0 +1,24 @@
+# Secrets
+.env
+
+# macOS
+.DS_Store
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# External cloned repository
+external_football_data/
+
+# Generated / downloaded data
+data/raw/
+data/processed/
+data/forward/
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
