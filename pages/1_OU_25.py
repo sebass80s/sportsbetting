@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKTEST_FILE = PROJECT_ROOT / "data/processed/ou_v1_backtest.csv"
+DIAGNOSTICS_FILE = PROJECT_ROOT / "data/processed/ou_v1_diagnostics.csv"
 PREDICTIONS_FILE = PROJECT_ROOT / "data/forward/ou_v1_predictions.csv"
 STATUS_FILE = PROJECT_ROOT / "data/forward/ou_v1_forward_status.csv"
 SNAPSHOT_HISTORY_FILE = PROJECT_ROOT / "data/forward/market_snapshot_history.csv"
@@ -38,9 +39,10 @@ def latest_snapshot_text():
 
 st.caption(latest_snapshot_text())
 
-forward_tab, backtest_tab, info_tab = st.tabs([
+forward_tab, backtest_tab, diagnostics_tab, info_tab = st.tabs([
     "Forward-signaler",
     "Backtest",
+    "Diagnostik",
     "Om modellen",
 ])
 
@@ -177,6 +179,44 @@ with backtest_tab:
             ).reset_index()
             st.subheader("Backtest per säsong")
             st.dataframe(season, use_container_width=True, hide_index=True)
+
+with diagnostics_tab:
+    st.subheader("Signaldiagnostik")
+    if not DIAGNOSTICS_FILE.exists():
+        st.info(
+            "Diagnostik saknas. Kör `python3 src/analyze_ou_v1_diagnostics.py` "
+            "efter backtestet."
+        )
+    else:
+        diag = pd.read_csv(DIAGNOSTICS_FILE)
+        if len(diag) == 0:
+            st.info("Ingen diagnostikdata hittades.")
+        else:
+            st.caption(
+                "Jämför OVER/UNDER inom olika signalstyrkor. Positiv economic CLV är "
+                "viktigare än kortsiktig ROI när vi bedömer om en bucket är lovande."
+            )
+
+            show = diag.copy()
+            for col in ["roi", "economic_clv", "median_clv", "beat_close", "hit_rate", "direction"]:
+                if col in show.columns:
+                    show[col] = show[col].round(2)
+            if "avg_odds" in show.columns:
+                show["avg_odds"] = show["avg_odds"].round(3)
+
+            st.dataframe(show, use_container_width=True, hide_index=True)
+
+            positive = diag[
+                (diag["economic_clv"] > 0)
+                & (diag["beat_close"] > 50)
+            ].copy()
+
+            st.subheader("Buckets med positiv CLV")
+            if len(positive) == 0:
+                st.warning("Ingen bucket har både positiv mean CLV och >50% beat-close.")
+            else:
+                positive = positive.sort_values("economic_clv", ascending=False)
+                st.dataframe(positive, use_container_width=True, hide_index=True)
 
 with info_tab:
     st.markdown(
