@@ -202,16 +202,16 @@ else:
     watch.loc[watch["bet_side"] == "YES", "Bevakning"] = "YES-signal"
     watch.loc[watch["bet_side"] == "NO", "Bevakning"] = "NO-signal"
 
-    # För NONE visar vi vilken sida modellen lutar åt och vilket odds som
-    # motsvarar den predikterade closing probabilityn på den sidan.
     lean_yes = watch["predicted_movement"] >= 0
     watch["Lutar åt"] = "NO"
     watch.loc[lean_yes, "Lutar åt"] = "YES"
     watch.loc[watch["bet_side"] == "YES", "Lutar åt"] = "YES"
     watch.loc[watch["bet_side"] == "NO", "Lutar åt"] = "NO"
 
-    watch["Modellodds"] = no_threshold
-    watch.loc[watch["Lutar åt"] == "YES", "Modellodds"] = yes_threshold
+    watch["Förväntat closing odds"] = no_threshold
+    watch.loc[
+        watch["Lutar åt"] == "YES", "Förväntat closing odds"
+    ] = yes_threshold
 
     if "best_bet_odds" in watch.columns:
         watch["Bästa odds"] = pd.to_numeric(
@@ -231,7 +231,8 @@ else:
 
     columns = [
         "Kickoff", "Hemma", "Borta", "Lutar åt", "Signal pp",
-        "Bevakning", "Modellodds", "Bästa odds", "Timmar till kickoff"
+        "Bevakning", "Förväntat closing odds", "Bästa odds",
+        "Timmar till kickoff"
     ]
     if "Bookmakers" in watch.columns:
         columns.insert(3, "Bookmakers")
