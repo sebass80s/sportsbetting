@@ -16,9 +16,22 @@ SCRIPTS = [
 ]
 
 
+# API-budgetskydd:
+# En schemalagd/automatisk körning utan --manual avslutas innan några API-anrop görs.
+# Dashboardens manuella uppdateringsknapp kör detta script med --manual.
+if "--manual" not in sys.argv:
+    print()
+    print("===================================")
+    print("MARKET SNAPSHOT HOPPAS ÖVER")
+    print("===================================")
+    print("Automatiska API-anrop är avstängda i budgetläge.")
+    print("Kör med --manual eller använd Streamlit-sidan API-uppdatering.")
+    raise SystemExit(0)
+
+
 print()
 print("===================================")
-print("AUTOMATIC MARKET SNAPSHOT")
+print("MANUAL MARKET SNAPSHOT")
 print("===================================")
 
 print("Start:", datetime.now().isoformat(timespec="seconds"))
