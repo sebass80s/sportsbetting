@@ -195,6 +195,52 @@ else:
         ] * 100
     )
 
+    # V1 predikterar en no-vig BTTS-sannolikhet vid stängning.
+    # Gränsoddset nedan är därför det lägsta odds som motsvarar
+    # modellens förväntade closing probability för vald sida.
+    if "predicted_close_probability" in active_display.columns:
+
+        predicted_close = pd.to_numeric(
+            active_display["predicted_close_probability"],
+            errors="coerce"
+        )
+
+        side_probability = pd.Series(
+            float("nan"),
+            index=active_display.index,
+            dtype="float64"
+        )
+
+        yes_mask = active_display["bet_side"] == "YES"
+        no_mask = active_display["bet_side"] == "NO"
+
+        side_probability.loc[yes_mask] = predicted_close.loc[yes_mask]
+        side_probability.loc[no_mask] = 1 - predicted_close.loc[no_mask]
+
+        active_display["Spela om odds ≥"] = (
+            1 / side_probability
+        ).round(2)
+
+        latest_odds_numeric = pd.to_numeric(
+            active_display["latest_odds"],
+            errors="coerce"
+        )
+
+        playable_now = (
+            latest_odds_numeric
+            >= active_display["Spela om odds ≥"]
+        )
+
+        active_display["Spelvärde"] = "Vänta"
+        active_display.loc[
+            playable_now,
+            "Spelvärde"
+        ] = "SPELVÄRDE NU"
+
+    else:
+        active_display["Spela om odds ≥"] = pd.NA
+        active_display["Spelvärde"] = "Saknar V1 close-prob"
+
     active_display = active_display.rename(
         columns={
             "start_time": "Kickoff",
@@ -218,6 +264,8 @@ else:
                 "Bookmaker",
                 "Odds",
                 "Senaste odds",
+                "Spela om odds ≥",
+                "Spelvärde",
                 "CLV %",
                 "Timmar till kickoff",
                 "Status"
@@ -225,6 +273,12 @@ else:
         ],
         use_container_width=True,
         hide_index=True
+    )
+
+    st.caption(
+        "'Spela om odds ≥' bygger på V1:s predikterade closing probability. "
+        "Det betyder att oddset förväntas slå modellens closing price; "
+        "det är inte samma sak som en garanterad positiv förväntad avkastning."
     )
 
 
