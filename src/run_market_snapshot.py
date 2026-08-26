@@ -11,20 +11,9 @@ FORWARD_DIR = PROJECT_ROOT / "data" / "forward"
 PREDICTIONS_FILE = FORWARD_DIR / "v1_predictions.csv"
 RAW_HISTORY_FILE = FORWARD_DIR / "market_raw_history.csv"
 
-# Automatiken ska bara hjälpa oss fånga closing line.
-# Den kör inte resultathämtning, eftersom scores kostar separata API-anrop.
-AUTO_SCRIPTS = [
-    "build_market_consensus.py",
-    "archive_market_snapshot.py",
-    "archive_raw_market.py",
-    "v1_forward_monitor.py",
-    "evaluate_forward_clv.py",
-    "evaluate_same_bookmaker_clv.py",
-    "v1_dashboard.py",
-]
-
-# Manuellt läge gör hela uppdateringen, inklusive resultat.
-MANUAL_SCRIPTS = [
+# Closing-only pipeline. Inga score-anrop här.
+# Resultat uppdateras separat från Streamlit-sidan när användaren väljer det.
+SNAPSHOT_SCRIPTS = [
     "build_market_consensus.py",
     "archive_market_snapshot.py",
     "archive_raw_market.py",
@@ -32,16 +21,11 @@ MANUAL_SCRIPTS = [
     "ou_v1_forward_monitor.py",
     "evaluate_forward_clv.py",
     "evaluate_same_bookmaker_clv.py",
-    "update_forward_results.py",
     "v1_dashboard.py",
 ]
 
-# Budgetinställningar.
-# En automatisk snapshot är relevant först inom tre timmar från kickoff.
+# Budgetinställningar för eventuell automatisk closing-körning.
 AUTO_WINDOW_MINUTES = 180
-
-# Om vi redan har en bookmaker-snapshot från de senaste 90 minuterna
-# för en aktuell V1-match gör vi inget nytt API-anrop.
 AUTO_MIN_SNAPSHOT_AGE_MINUTES = 90
 
 
@@ -61,11 +45,7 @@ def run_scripts(scripts):
         if result.returncode != 0:
             print()
             print("FEL!")
-            print(
-                script,
-                "returnerade kod",
-                result.returncode
-            )
+            print(script, "returnerade kod", result.returncode)
             sys.exit(result.returncode)
 
 
@@ -97,17 +77,12 @@ def automatic_snapshot_needed():
 
     candidates = predictions[
         (predictions["minutes_to_kickoff"] > 0)
-        &
-        (
-            predictions["minutes_to_kickoff"]
-            <= AUTO_WINDOW_MINUTES
-        )
+        & (predictions["minutes_to_kickoff"] <= AUTO_WINDOW_MINUTES)
     ].copy()
 
     if len(candidates) == 0:
         return False, "ingen fryst V1-match inom 3 timmar"
 
-    # Saknas historik helt behöver vi självklart en snapshot.
     if not RAW_HISTORY_FILE.exists():
         return True, "match inom 3 timmar och ingen snapshot-historik"
 
@@ -125,9 +100,7 @@ def automatic_snapshot_needed():
         errors="coerce"
     )
 
-    candidate_ids = set(
-        candidates["fixture_id"].astype(str)
-    )
+    candidate_ids = set(candidates["fixture_id"].astype(str))
 
     candidate_history = history[
         history["fixture_id"].astype(str).isin(candidate_ids)
@@ -136,27 +109,17 @@ def automatic_snapshot_needed():
     if len(candidate_history) == 0:
         return True, "match inom 3 timmar utan tidigare snapshot"
 
-    latest_snapshot = candidate_history[
-        "snapshot_timestamp"
-    ].max()
+    latest_snapshot = candidate_history["snapshot_timestamp"].max()
 
     if pd.isna(latest_snapshot):
         return True, "match inom 3 timmar utan giltig snapshot-tid"
 
-    age_minutes = (
-        now - latest_snapshot
-    ).total_seconds() / 60
+    age_minutes = (now - latest_snapshot).total_seconds() / 60
 
     if age_minutes >= AUTO_MIN_SNAPSHOT_AGE_MINUTES:
-        return (
-            True,
-            f"senaste relevanta snapshot är {age_minutes:.0f} min gammal"
-        )
+        return True, f"senaste relevanta snapshot är {age_minutes:.0f} min gammal"
 
-    return (
-        False,
-        f"senaste relevanta snapshot är bara {age_minutes:.0f} min gammal"
-    )
+    return False, f"senaste relevanta snapshot är bara {age_minutes:.0f} min gammal"
 
 
 manual = "--manual" in sys.argv
@@ -169,7 +132,9 @@ if manual:
     print("===================================")
     print("Start:", datetime.now().isoformat(timespec="seconds"))
     print()
-    run_scripts(MANUAL_SCRIPTS)
+    print("Budgetläge: inga score-anrop görs i denna pipeline.")
+    print()
+    run_scripts(SNAPSHOT_SCRIPTS)
 
 else:
     print("AUTO CLOSING SNAPSHOT")
@@ -184,20 +149,13 @@ else:
         raise SystemExit(0)
 
     print()
-    print(
-        "Budgetläge: hämtar marknaden endast för att fånga "
-        "closing-data. Resultat hämtas inte automatiskt."
-    )
+    print("Budgetläge: hämtar bara marknaden för closing-data.")
     print()
-
-    run_scripts(AUTO_SCRIPTS)
+    run_scripts(SNAPSHOT_SCRIPTS)
 
 
 print()
 print("===================================")
 print("SNAPSHOT KLAR")
 print("===================================")
-print(
-    "Slut:",
-    datetime.now().isoformat(timespec="seconds")
-)
+print("Slut:", datetime.now().isoformat(timespec="seconds"))
