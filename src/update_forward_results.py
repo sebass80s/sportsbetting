@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import requests
+import time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -135,10 +136,127 @@ fixture_lookup = {
 
 
 # ==================================================
+# SCORE-HJÄLPARE
+# ==================================================
+
+SCORES_URL = (
+    "https://api.oddspapi.io/v4/scores"
+)
+
+
+def extract_fulltime_score(score_data):
+    """Returnera fulltidsscore från kända OddsPapi-format."""
+
+    scores = score_data.get(
+        "scores",
+        {}
+    )
+
+    if not isinstance(scores, dict):
+        return None, None
+
+    # Nyare dokumenterat format:
+    # scores -> periods -> fulltime/result
+    periods = scores.get(
+        "periods"
+    )
+
+    if isinstance(periods, dict):
+
+        for key in (
+            "fulltime",
+            "result",
+            "full_time",
+            "ft"
+        ):
+
+            period = periods.get(key)
+
+            if isinstance(period, dict):
+
+                home = period.get(
+                    "participant1Score"
+                )
+
+                away = period.get(
+                    "participant2Score"
+                )
+
+                if (
+                    home is not None
+                    and
+                    away is not None
+                ):
+                    return home, away
+
+    # Äldre/alternativt dokumenterat format:
+    # scores -> periodnycklar direkt.
+    for key in (
+        "fulltime",
+        "result",
+        "full_time",
+        "ft",
+        "0"
+    ):
+
+        period = scores.get(key)
+
+        if isinstance(period, dict):
+
+            home = period.get(
+                "participant1Score"
+            )
+
+            away = period.get(
+                "participant2Score"
+            )
+
+            if (
+                home is not None
+                and
+                away is not None
+            ):
+                return home, away
+
+    return None, None
+
+
+def get_finished_score(fixture_id):
+
+    score_response = requests.get(
+        SCORES_URL,
+        params={
+            "apiKey": API_KEY,
+            "fixtureId": fixture_id
+        },
+        timeout=30
+    )
+
+    if not score_response.ok:
+
+        print(
+            f"Score-anrop misslyckades för {fixture_id}: "
+            f"HTTP {score_response.status_code}"
+        )
+
+        return None, None
+
+    try:
+        score_data = score_response.json()
+    except ValueError:
+        return None, None
+
+    return extract_fulltime_score(
+        score_data
+    )
+
+
+# ==================================================
 # RESULTAT
 # ==================================================
 
 rows = []
+score_requests = 0
 
 
 for _, bet in bets.iterrows():
@@ -172,114 +290,133 @@ for _, bet in bets.iterrows():
         continue
 
 
-    # ==================================================
-    # FÖRSÖK LÄSA RESULTAT
-    # ==================================================
-
-    home_score = fixture.get(
-        "participant1Score"
-    )
-
-    away_score = fixture.get(
-        "participant2Score"
-    )
-
     status_id = fixture.get(
         "statusId"
     )
 
+    # OddsPapi: statusId 2 = färdigspelad.
+    # Vi gör bara score-anrop för färdiga matcher för att hushålla
+    # med API-kvoten.
+    if status_id != 2:
+        rows.append(row)
+        continue
 
-    # Vi accepterar resultat först när båda
-    # målsiffrorna faktiskt finns.
+
+    # Scores-endpointen har 1000 ms cooldown.
+    if score_requests > 0:
+        time.sleep(1.05)
+
+    home_score, away_score = (
+        get_finished_score(
+            fixture_id
+        )
+    )
+
+    score_requests += 1
+
+
     if (
-        home_score is not None
-        and
-        away_score is not None
+        home_score is None
+        or
+        away_score is None
     ):
 
-        try:
-
-            home_goals = int(
-                home_score
-            )
-
-            away_goals = int(
-                away_score
-            )
-
-        except (
-            ValueError,
-            TypeError
-        ):
-
-            rows.append(row)
-
-            continue
-
-
-        actual_btts = int(
-            home_goals > 0
-            and
-            away_goals > 0
+        row["result_status"] = (
+            "SCORE_NOT_FOUND"
         )
 
+        rows.append(row)
 
-        if bet["bet_side"] == "YES":
-
-            won = (
-                actual_btts == 1
-            )
-
-        elif bet["bet_side"] == "NO":
-
-            won = (
-                actual_btts == 0
-            )
-
-        else:
-
-            won = False
+        continue
 
 
-        odds = bet[
-            "best_bet_odds"
-        ]
+    try:
 
-
-        if won:
-
-            profit = (
-                odds - 1
-            )
-
-        else:
-
-            profit = -1
-
-
-        row["home_goals"] = (
-            home_goals
+        home_goals = int(
+            home_score
         )
 
-        row["away_goals"] = (
-            away_goals
+        away_goals = int(
+            away_score
         )
 
-        row["actual_btts"] = (
-            actual_btts
-        )
-
-        row["won"] = int(
-            won
-        )
-
-        row["profit"] = (
-            profit
-        )
+    except (
+        ValueError,
+        TypeError
+    ):
 
         row["result_status"] = (
-            "FINISHED"
+            "INVALID_SCORE"
         )
+
+        rows.append(row)
+
+        continue
+
+
+    actual_btts = int(
+        home_goals > 0
+        and
+        away_goals > 0
+    )
+
+
+    if bet["bet_side"] == "YES":
+
+        won = (
+            actual_btts == 1
+        )
+
+    elif bet["bet_side"] == "NO":
+
+        won = (
+            actual_btts == 0
+        )
+
+    else:
+
+        won = False
+
+
+    odds = bet[
+        "best_bet_odds"
+    ]
+
+
+    if won:
+
+        profit = (
+            odds - 1
+        )
+
+    else:
+
+        profit = -1
+
+
+    row["home_goals"] = (
+        home_goals
+    )
+
+    row["away_goals"] = (
+        away_goals
+    )
+
+    row["actual_btts"] = (
+        actual_btts
+    )
+
+    row["won"] = int(
+        won
+    )
+
+    row["profit"] = (
+        profit
+    )
+
+    row["result_status"] = (
+        "FINISHED"
+    )
 
 
     rows.append(row)
@@ -308,6 +445,11 @@ print()
 print(
     "Frysta bets:",
     len(results)
+)
+
+print(
+    "Score-anrop:",
+    score_requests
 )
 
 print()
