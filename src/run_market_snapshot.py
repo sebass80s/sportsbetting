@@ -13,10 +13,16 @@ RAW_HISTORY_FILE = FORWARD_DIR / "market_raw_history.csv"
 
 # Closing-only pipeline. Inga score-anrop här.
 # Resultat uppdateras separat från Streamlit-sidan när användaren väljer det.
+#
+# Viktigt: den manuella uppdateringen bygger också om forward-features och
+# V1-snapshot-predictions. Annars blir Streamlit-tabellen "Kommande matcher –
+# V1 bevakning" tom trots att nya fixtures och marknadsodds har hämtats.
 SNAPSHOT_SCRIPTS = [
+    "build_forward_features.py",
     "build_market_consensus.py",
     "archive_market_snapshot.py",
     "archive_raw_market.py",
+    "generate_v1_forward.py",
     "v1_forward_monitor.py",
     "ou_v1_forward_monitor.py",
     "evaluate_forward_clv.py",
