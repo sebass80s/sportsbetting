@@ -24,6 +24,14 @@ st.caption(
     "Manuellt budgetläge för OddsPapi. Sidan gör 0 API-anrop tills du själv trycker på knappen."
 )
 
+# Körloggen sparas i session_state så att den överlever Streamlit-reruns.
+if "api_refresh_log" not in st.session_state:
+    st.session_state.api_refresh_log = []
+if "api_refresh_failed" not in st.session_state:
+    st.session_state.api_refresh_failed = None
+if "api_refresh_finished_at" not in st.session_state:
+    st.session_state.api_refresh_finished_at = None
+
 include_fixtures = st.checkbox(
     "Uppdatera även Premier League-matchlistan (+1 API-anrop)",
     value=False,
@@ -106,15 +114,43 @@ if st.button("🔄 Uppdatera odds/CLV nu", type="primary"):
             if r.returncode != 0:
                 failed = True
 
-    if failed:
-        st.error("Uppdateringen misslyckades. Inga automatiska omförsök görs.")
-    else:
-        st.success("Klart. Odds, snapshots och CLV är uppdaterade.")
+    # Spara endast serialiserbar text i session_state, inte CompletedProcess-objekt.
+    st.session_state.api_refresh_log = [
+        {
+            "name": name,
+            "returncode": result.returncode,
+            "text": (result.stdout or "")
+            + ("\n" + result.stderr if result.stderr else ""),
+        }
+        for name, result in outputs
+    ]
+    st.session_state.api_refresh_failed = failed
+    st.session_state.api_refresh_finished_at = pd.Timestamp.now(tz="Europe/Stockholm")
 
-    with st.expander("Visa körlogg"):
-        for name, result in outputs:
-            st.markdown(f"**{name}**")
-            st.code((result.stdout or "") + ("\n" + result.stderr if result.stderr else ""))
+if st.session_state.api_refresh_failed is True:
+    st.error("Senaste uppdateringen misslyckades. Inga automatiska omförsök görs.")
+elif st.session_state.api_refresh_failed is False:
+    st.success("Klart. Odds, snapshots och CLV är uppdaterade.")
+
+if st.session_state.api_refresh_log:
+    finished_at = st.session_state.api_refresh_finished_at
+    if finished_at is not None:
+        st.caption(
+            "Senaste körning: "
+            f"{finished_at.strftime('%d/%m/%Y %H:%M:%S')} (Europe/Stockholm)"
+        )
+
+    with st.expander("Visa senaste körlogg", expanded=False):
+        for entry in st.session_state.api_refresh_log:
+            status = "OK" if entry["returncode"] == 0 else f"FEL ({entry['returncode']})"
+            st.markdown(f"**{entry['name']} — {status}**")
+            st.code(entry["text"] or "(ingen output)")
+
+        if st.button("Rensa körlogg"):
+            st.session_state.api_refresh_log = []
+            st.session_state.api_refresh_failed = None
+            st.session_state.api_refresh_finished_at = None
+            st.rerun()
 
 st.divider()
 st.subheader("Vad knappen gör")
