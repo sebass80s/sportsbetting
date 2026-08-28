@@ -174,9 +174,8 @@ else:
 
 st.subheader("Kommande matcher – V1 bevakning")
 st.caption(
-    "Visar alla matcher som klarar V1:s data- och marknadskrav, även när "
-    "signalen ännu inte når ±0,5 procentenheter. Själva V1-testets "
-    "signalgräns är oförändrad."
+    "Visar alla matcher som klarar V1:s data- och marknadskrav. "
+    "YES/NO visas först när signalen når V1:s gräns på ±0,5 procentenheter."
 )
 
 if predictions.empty:
@@ -202,16 +201,17 @@ else:
     watch.loc[watch["bet_side"] == "YES", "Bevakning"] = "YES-signal"
     watch.loc[watch["bet_side"] == "NO", "Bevakning"] = "NO-signal"
 
-    lean_yes = watch["predicted_movement"] >= 0
-    watch["Lutar åt"] = "NO"
-    watch.loc[lean_yes, "Lutar åt"] = "YES"
+    watch["Lutar åt"] = "–"
     watch.loc[watch["bet_side"] == "YES", "Lutar åt"] = "YES"
     watch.loc[watch["bet_side"] == "NO", "Lutar åt"] = "NO"
 
-    watch["Förväntat closing odds"] = no_threshold
+    watch["Förväntat closing odds"] = pd.NA
     watch.loc[
-        watch["Lutar åt"] == "YES", "Förväntat closing odds"
+        watch["bet_side"] == "YES", "Förväntat closing odds"
     ] = yes_threshold
+    watch.loc[
+        watch["bet_side"] == "NO", "Förväntat closing odds"
+    ] = no_threshold
 
     if "best_bet_odds" in watch.columns:
         watch["Bästa odds"] = pd.to_numeric(
