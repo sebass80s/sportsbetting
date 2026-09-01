@@ -248,7 +248,9 @@ else:
 # MATCHER SOM KRÄVER UPPMÄRKSAMHET
 # ==================================================
 
-attention = df[df["status"].isin(["TAKE_SNAPSHOT", "NO_CLOSE_SNAPSHOT"])]
+# Endast aktiva bets kan kräva en åtgärd. Historiska NO_CLOSE_SNAPSHOT
+# behålls i data som dokumentation, men ska inte visas som en aktuell varning.
+attention = active[active["status"] == "TAKE_SNAPSHOT"].copy()
 st.subheader("Kräver uppmärksamhet")
 
 if len(attention) == 0:
