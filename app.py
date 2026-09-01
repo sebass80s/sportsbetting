@@ -10,6 +10,7 @@ STATUS_FILE = PROJECT_ROOT / "data/forward/v1_forward_status.csv"
 RESULT_FILE = PROJECT_ROOT / "data/forward/v1_forward_results.csv"
 SNAPSHOT_FILE = PROJECT_ROOT / "data/forward/market_snapshot_history.csv"
 PREDICTION_FILE = PROJECT_ROOT / "data/forward/v1_snapshot_predictions.csv"
+FROZEN_PREDICTION_FILE = PROJECT_ROOT / "data/forward/v1_predictions.csv"
 
 
 # ==================================================
@@ -35,6 +36,25 @@ def load_data():
     status = pd.read_csv(STATUS_FILE)
     results = pd.read_csv(RESULT_FILE)
     status["start_time"] = pd.to_datetime(status["start_time"], utc=True)
+
+    # Hämta den predikterade closing probability som frystes när bettet
+    # först loggades. Den ska inte ersättas av senare modellkörningar.
+    if FROZEN_PREDICTION_FILE.exists():
+        try:
+            frozen = pd.read_csv(FROZEN_PREDICTION_FILE)
+        except pd.errors.EmptyDataError:
+            frozen = pd.DataFrame()
+    else:
+        frozen = pd.DataFrame()
+
+    if not frozen.empty and "predicted_close_probability" in frozen.columns:
+        frozen_cols = ["fixture_id", "predicted_close_probability"]
+        frozen_small = (
+            frozen[frozen_cols]
+            .drop_duplicates(subset=["fixture_id"], keep="first")
+            .copy()
+        )
+        status = status.merge(frozen_small, on="fixture_id", how="left")
 
     result_cols = [
         "fixture_id", "home_goals", "away_goals", "actual_btts",
@@ -176,9 +196,9 @@ else:
         hide_index=True
     )
     st.caption(
-        "'Betta om odds ≥' är V1:s gräns för att aktuellt odds ska slå modellens "
-        "predikterade closing price för vald bet-sida. 'BETTA NU' betyder att det "
-        "senast observerade oddset ligger på eller över den gränsen."
+        "'Betta om odds ≥' bygger på den closing probability som frystes när "
+        "V1-signalen först loggades. 'BETTA NU' betyder att senast observerade "
+        "odds ligger på eller över den gränsen."
     )
 
 
