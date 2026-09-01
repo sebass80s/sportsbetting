@@ -73,6 +73,23 @@ def load_latest_snapshot_time():
     return None if timestamps.empty else timestamps.max()
 
 
+def betting_threshold(predicted_close, bet_side):
+    """Returnera minsta odds som slår V1:s predikterade closing price."""
+    p = pd.to_numeric(predicted_close, errors="coerce")
+    threshold = pd.Series(float("nan"), index=p.index, dtype="float64")
+
+    yes_mask = bet_side == "YES"
+    no_mask = bet_side == "NO"
+
+    valid_yes = yes_mask & (p > 0) & (p < 1)
+    valid_no = no_mask & (p > 0) & (p < 1)
+
+    threshold.loc[valid_yes] = 1 / p.loc[valid_yes]
+    threshold.loc[valid_no] = 1 / (1 - p.loc[valid_no])
+
+    return threshold.round(2)
+
+
 df = load_data()
 predictions = load_predictions()
 latest_snapshot_time = load_latest_snapshot_time()
@@ -124,26 +141,23 @@ else:
     active_display["CLV %"] = active_display["current_economic_clv"] * 100
 
     if "predicted_close_probability" in active_display.columns:
-        predicted_close = pd.to_numeric(
-            active_display["predicted_close_probability"], errors="coerce"
+        active_display["Betta om odds ≥"] = betting_threshold(
+            active_display["predicted_close_probability"],
+            active_display["bet_side"],
         )
-        side_probability = pd.Series(
-            float("nan"), index=active_display.index, dtype="float64"
-        )
-        yes_mask = active_display["bet_side"] == "YES"
-        no_mask = active_display["bet_side"] == "NO"
-        side_probability.loc[yes_mask] = predicted_close.loc[yes_mask]
-        side_probability.loc[no_mask] = 1 - predicted_close.loc[no_mask]
-        active_display["Spela om odds ≥"] = (1 / side_probability).round(2)
         latest_odds_numeric = pd.to_numeric(
             active_display["latest_odds"], errors="coerce"
         )
-        playable_now = latest_odds_numeric >= active_display["Spela om odds ≥"]
-        active_display["Spelvärde"] = "Vänta"
-        active_display.loc[playable_now, "Spelvärde"] = "SPELVÄRDE NU"
+        playable_now = (
+            active_display["Betta om odds ≥"].notna()
+            & latest_odds_numeric.notna()
+            & (latest_odds_numeric >= active_display["Betta om odds ≥"])
+        )
+        active_display["Bet-status"] = "VÄNTA"
+        active_display.loc[playable_now, "Bet-status"] = "BETTA NU"
     else:
-        active_display["Spela om odds ≥"] = pd.NA
-        active_display["Spelvärde"] = "Saknar V1 close-prob"
+        active_display["Betta om odds ≥"] = pd.NA
+        active_display["Bet-status"] = "Saknar V1 close-prob"
 
     active_display = active_display.rename(columns={
         "start_time": "Kickoff", "home_team": "Hemma",
@@ -155,16 +169,16 @@ else:
     st.dataframe(
         active_display[[
             "Kickoff", "Hemma", "Borta", "Bet", "Bookmaker", "Odds",
-            "Senaste odds", "Spela om odds ≥", "Spelvärde", "CLV %",
+            "Senaste odds", "Betta om odds ≥", "Bet-status", "CLV %",
             "Timmar till kickoff", "Status"
         ]],
         use_container_width=True,
         hide_index=True
     )
     st.caption(
-        "'Spela om odds ≥' bygger på V1:s predikterade closing probability. "
-        "Det betyder att oddset förväntas slå modellens closing price; "
-        "det är inte samma sak som en garanterad positiv förväntad avkastning."
+        "'Betta om odds ≥' är V1:s gräns för att aktuellt odds ska slå modellens "
+        "predikterade closing price för vald bet-sida. 'BETTA NU' betyder att det "
+        "senast observerade oddset ligger på eller över den gränsen."
     )
 
 
@@ -191,12 +205,6 @@ else:
         pd.to_numeric(watch["predicted_movement"], errors="coerce") * 100
     ).round(2)
 
-    predicted_close = pd.to_numeric(
-        watch["predicted_close_probability"], errors="coerce"
-    )
-    yes_threshold = (1 / predicted_close).round(2)
-    no_threshold = (1 / (1 - predicted_close)).round(2)
-
     watch["Bevakning"] = "Ingen signal ännu"
     watch.loc[watch["bet_side"] == "YES", "Bevakning"] = "YES-signal"
     watch.loc[watch["bet_side"] == "NO", "Bevakning"] = "NO-signal"
@@ -205,13 +213,10 @@ else:
     watch.loc[watch["bet_side"] == "YES", "Lutar åt"] = "YES"
     watch.loc[watch["bet_side"] == "NO", "Lutar åt"] = "NO"
 
-    watch["Förväntat closing odds"] = pd.NA
-    watch.loc[
-        watch["bet_side"] == "YES", "Förväntat closing odds"
-    ] = yes_threshold
-    watch.loc[
-        watch["bet_side"] == "NO", "Förväntat closing odds"
-    ] = no_threshold
+    watch["Betta om odds ≥"] = betting_threshold(
+        watch["predicted_close_probability"],
+        watch["bet_side"],
+    )
 
     if "best_bet_odds" in watch.columns:
         watch["Bästa odds"] = pd.to_numeric(
@@ -219,6 +224,17 @@ else:
         )
     else:
         watch["Bästa odds"] = pd.NA
+
+    watch["Bet-status"] = "VÄNTA"
+    no_signal = ~watch["bet_side"].isin(["YES", "NO"])
+    watch.loc[no_signal, "Bet-status"] = "INGEN SIGNAL"
+
+    playable = (
+        watch["Betta om odds ≥"].notna()
+        & watch["Bästa odds"].notna()
+        & (watch["Bästa odds"] >= watch["Betta om odds ≥"])
+    )
+    watch.loc[playable, "Bet-status"] = "BETTA NU"
 
     watch["Timmar till kickoff"] = (
         watch["start_time"] - now
@@ -231,7 +247,7 @@ else:
 
     columns = [
         "Kickoff", "Hemma", "Borta", "Lutar åt", "Signal pp",
-        "Bevakning", "Förväntat closing odds", "Bästa odds",
+        "Bevakning", "Betta om odds ≥", "Bästa odds", "Bet-status",
         "Timmar till kickoff"
     ]
     if "Bookmakers" in watch.columns:
