@@ -39,20 +39,22 @@ include_fixtures = st.checkbox(
 )
 
 include_results = st.checkbox(
-    "Uppdatera även resultat",
-    value=False,
+    "Uppdatera även resultat (+1 fixture-anrop, score endast för nya färdiga bets)",
+    value=True,
     help=(
-        "Hämtar fixtures och score för färdigspelade frysta V1-spel. "
-        "Detta använder extra API-anrop, så låt den vara av om du bara vill uppdatera odds och CLV."
+        "Hämtar fixtures för de frysta V1-spelen. Redan sparade slutresultat återanvänds, "
+        "så score-endpointen anropas bara för färdigspelade bets som ännu saknar resultat."
     ),
 )
 
-base_cost = 4 + (1 if include_fixtures else 0)
+base_cost = 4 + (1 if include_fixtures else 0) + (1 if include_results else 0)
 
 st.info(
-    f"Odds/CLV-uppdateringen kostar normalt **{base_cost} API-anrop** "
-    f"({'1 fixtures + 4 bookmakers' if include_fixtures else '4 bookmakers'}). "
-    "Resultatuppdatering kan använda ytterligare anrop beroende på hur många frysta matcher som är färdigspelade."
+    f"Den valda körningen kostar normalt minst **{base_cost} API-anrop** "
+    f"(4 bookmakers"
+    f"{', +1 fixturelista' if include_fixtures else ''}"
+    f"{', +1 resultat-fixtures' if include_results else ''}). "
+    "Om nya frysta bets har hunnit bli färdigspelade tillkommer ett score-anrop per sådan match."
 )
 
 if SNAPSHOT_FILE.exists():
@@ -130,7 +132,7 @@ if st.button("🔄 Uppdatera odds/CLV nu", type="primary"):
 if st.session_state.api_refresh_failed is True:
     st.error("Senaste uppdateringen misslyckades. Inga automatiska omförsök görs.")
 elif st.session_state.api_refresh_failed is False:
-    st.success("Klart. Odds, snapshots och CLV är uppdaterade.")
+    st.success("Klart. Odds, snapshots, CLV och valda resultat är uppdaterade.")
 
 if st.session_state.api_refresh_log:
     finished_at = st.session_state.api_refresh_finished_at
@@ -155,7 +157,7 @@ if st.session_state.api_refresh_log:
 st.divider()
 st.subheader("Vad knappen gör")
 st.markdown(
-    "Den manuella odds/CLV-körningen hämtar marknaden, arkiverar både consensus- och "
-    "bookmaker-snapshots, uppdaterar V1-monitorn, räknar om CLV och bygger om dashboarden. "
-    "Resultat hämtas bara om du markerar resultatrutan ovan."
+    "Den manuella körningen hämtar marknaden, arkiverar både consensus- och bookmaker-snapshots, "
+    "uppdaterar V1-monitorn, räknar om CLV och bygger dashboarden. Resultatrutan är på som standard: "
+    "redan färdiga resultat återanvänds och nya score-anrop görs bara när ett fryst bet har spelats klart."
 )
