@@ -8,7 +8,7 @@ import requests
 key = os.environ.get("ODDSPAPI_API_KEY")
 if not key:
     raise SystemExit("ODDSPAPI_API_KEY secret missing")
-response = requests.get("https://api.oddspapi.io/v4/fixtures", params={"apiKey":key,"tournamentId":17,"language":"en"}, timeout=30)
+response = requests.get("https://api.oddspapi.io/v4/fixtures", params={"apiKey":key,"tournamentId":17,"language":"en","statusId":0}, timeout=30)
 response.raise_for_status()
 payload = response.json()
 if not isinstance(payload, list):
@@ -30,8 +30,8 @@ for fixture in payload:
     if dt <= now:
         continue
     participants = fixture.get("participants") or []
-    home = fixture.get("homeTeam") or fixture.get("home_team")
-    away = fixture.get("awayTeam") or fixture.get("away_team")
+    home = fixture.get("participant1Name") or fixture.get("homeTeam") or fixture.get("home_team")
+    away = fixture.get("participant2Name") or fixture.get("awayTeam") or fixture.get("away_team")
     if isinstance(home, dict):
         home = home.get("name")
     if isinstance(away, dict):
