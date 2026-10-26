@@ -30,26 +30,10 @@ MARKET_OU25 = "1010"
 # API-NYCKEL
 # ==================================================
 
-API_KEY = None
-
-with open(ENV_FILE, "r", encoding="utf-8-sig") as f:
-    for line in f:
-        line = line.strip()
-
-        if line.startswith("ODDSPAPI_API_KEY="):
-            API_KEY = (
-                line
-                .split("=", 1)[1]
-                .strip()
-                .strip("'\"")
-            )
-            break
-
+import os
+API_KEY = os.environ.get("ODDSPAPI_API_KEY")
 if not API_KEY:
-    raise RuntimeError(
-        "Kunde inte läsa API-nyckeln från .env"
-    )
-
+    raise RuntimeError("ODDSPAPI_API_KEY saknas i miljön")
 
 # ==================================================
 # FIXTURES
@@ -62,7 +46,7 @@ fixture_file = (
     / "upcoming_pl.csv"
 )
 
-fixtures = pd.read_csv(fixture_file)
+fixtures = pd.read_csv(fixture_file, dtype={"fixture_id": str})
 
 fixture_lookup = (
     fixtures
@@ -185,12 +169,12 @@ for bookmaker in BOOKMAKERS:
 
     for fixture in data:
 
-        fixture_id = fixture.get(
+        fixture_id = str(fixture.get(
             "fixtureId"
-        )
+        ))
 
         info = fixture_lookup.get(
-            fixture_id,
+            str(fixture_id),
             {}
         )
 
