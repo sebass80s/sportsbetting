@@ -10,19 +10,10 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 
-API_KEY = None
-
-with open(ENV_FILE, "r", encoding="utf-8-sig") as f:
-    for line in f:
-        line = line.strip()
-
-        if line.startswith("ODDSPAPI_API_KEY="):
-            API_KEY = line.split("=", 1)[1].strip().strip("'\"")
-            break
-
+import os
+API_KEY = os.environ.get("ODDSPAPI_API_KEY")
 if not API_KEY:
-    raise RuntimeError("Kunde inte läsa API-nyckeln från .env")
-
+    raise RuntimeError("ODDSPAPI_API_KEY saknas i miljön")
 
 # ==================================================
 # HÄMTA FIXTURES
