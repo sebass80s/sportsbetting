@@ -1,0 +1,45 @@
+name: Generate V1 signals
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 8 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: v1-signals
+  cancel-in-progress: false
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pandas numpy scikit-learn requests
+      - name: Check required training data
+        run: |
+          test -s external_football_data/data/england/premier-league.csv || { echo "::error::Missing historical odds CSV"; exit 1; }
+          test -s data/processed/attack_defense_features.csv || { echo "::error::Missing historical feature CSV"; exit 1; }
+          test -s data/raw/premier_league_2015_2026.csv || { echo "::error::Missing historical results CSV"; exit 1; }
+      - name: Fetch fixtures and live odds
+        env:
+          ODDSPAPI_API_KEY: ${{ secrets.ODDSPAPI_API_KEY }}
+        run: |
+          mkdir -p data/forward
+          python src/get_upcoming_pl.py
+          python src/build_forward_features.py
+          python src/build_market_consensus.py
+      - name: Generate frozen V1 predictions
+        run: python src/generate_v1_forward.py
+      - name: Publish new signals
+        run: python scripts/publish_v1_signals.py
+      - name: Commit public signals
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/v1_live_signals.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "data: publish V1 live signals"
+            git push
+          fi
