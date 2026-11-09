@@ -61,10 +61,6 @@ if SIGNALS.exists():
             enrolled += 1
 print("New pre-kickoff signals enrolled:", enrolled)
 
-response = requests.get(API + "/fixtures", params={"apiKey": key, "tournamentId": 17, "language": "en"}, timeout=30)
-response.raise_for_status()
-fixtures = {str(f.get("fixtureId")): f for f in response.json()}
-print("Fixtures received:", len(fixtures))
 
 def fulltime(payload):
     scores = payload.get("scores", {})
@@ -85,11 +81,20 @@ def fulltime(payload):
 
 updated = 0
 calls = 0
+unresolved = []
+now = datetime.now(timezone.utc)
 for row in rows:
     if row.get("result_status") == "FINISHED":
         continue
-    fixture = fixtures.get(str(row["fixture_id"]))
-    if not fixture or fixture.get("statusId") != 2:
+    try:
+        kickoff = datetime.fromisoformat(row["start_time"].strip().replace("Z", "+00:00"))
+        if kickoff.tzinfo is None:
+            raise ValueError("kickoff missing timezone")
+    except (ValueError, KeyError) as exc:
+        raise SystemExit(f"Invalid kickoff for {row.get('fixture_id')}: {exc}")
+    # Query the score endpoint directly. The fixtures listing may omit older games
+    # or report stale status, leaving finished bets permanently PENDING.
+    if (now - kickoff).total_seconds() < 4 * 3600:
         continue
     if calls:
         time.sleep(1.1)
@@ -98,7 +103,8 @@ for row in rows:
     resp.raise_for_status()
     score = fulltime(resp.json())
     if score is None:
-        print("No fulltime score for", row["fixture_id"])
+        unresolved.append(row["fixture_id"])
+        print("WARNING: No fulltime score for", row["fixture_id"])
         continue
     home, away = score
     side = row.get("bet_side")
@@ -115,4 +121,6 @@ if updated or enrolled:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
-print(f"Updated {updated} finished results; {calls} score requests")
+print(f"Updated {updated} finished results; {calls} score requests; {len(unresolved)} unresolved past fixtures")
+if unresolved:
+    print("WARNING: Still awaiting fulltime scores:", ", ".join(unresolved))
