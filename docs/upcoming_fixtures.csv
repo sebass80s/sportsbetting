@@ -1,10 +1,4 @@
 fixture_id,start_time,home_team,away_team
-id1000001772221406,2026-11-21T12:30:00+00:00,Manchester City,Fulham FC
-id1000001772221392,2026-11-21T15:00:00+00:00,Aston Villa,Sunderland AFC
-id1000001772221394,2026-11-21T15:00:00+00:00,AFC Bournemouth,Nottingham Forest
-id1000001772221398,2026-11-21T15:00:00+00:00,Chelsea FC,Leeds United
-id1000001772221400,2026-11-21T15:00:00+00:00,Coventry City,Crystal Palace
-id1000001772221410,2026-11-21T15:00:00+00:00,Tottenham Hotspur,Ipswich Town
 id1000001772221408,2026-11-21T17:30:00+00:00,Newcastle United,Arsenal FC
 id1000001772221402,2026-11-22T14:00:00+00:00,Hull City,Brighton & Hove Albion
 id1000001772221404,2026-11-22T16:30:00+00:00,Liverpool FC,Manchester United
